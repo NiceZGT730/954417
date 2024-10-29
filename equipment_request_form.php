@@ -1,4 +1,5 @@
 <?php
+session_start();
 include 'db_connect.php';
 
 $assignmentId = $_GET['assignment_id'] ?? null;
@@ -9,10 +10,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $equipmentIds = $_POST['Equipment_id'];
     $quantitiesUsed = $_POST['QuantityUsed'];
 
-
     foreach ($equipmentIds as $index => $equipmentId) {
         $quantityUsed = $quantitiesUsed[$index];
-
 
         $checkQuantityQuery = "SELECT QuantityAvailable FROM equipment WHERE id = ?";
         $checkQuantityStmt = $conn->prepare($checkQuantityQuery);
@@ -23,12 +22,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($result->num_rows > 0) {
             $row = $result->fetch_assoc();
             if ($row['QuantityAvailable'] < $quantityUsed) {
-
-                echo "<script>alert('จำนวนอุปกรณ์ที่เบิกเกินจำนวนที่มีอยู่: $quantityUsed / " . $row['QuantityAvailable'] . "');</script>";
+                $_SESSION['error'] = "จำนวนอุปกรณ์ที่เบิกเกินจำนวนที่มีอยู่: $quantityUsed / " . $row['QuantityAvailable'];
+                header("Location: equipment_request_form.php?assignment_id=$assignmentId"); // กลับไปยังหน้าเดิมพร้อม assignment_id
                 exit();
             }
         } else {
-            echo "<script>alert('ไม่พบอุปกรณ์ที่เลือก');</script>";
+            $_SESSION['error'] = "ไม่พบอุปกรณ์ที่เลือก";
+            header("Location: equipment_request_form.php?assignment_id=$assignmentId"); // กลับไปยังหน้าเดิมพร้อม assignment_id
             exit();
         }
     }
@@ -111,28 +111,28 @@ $equipmentResult = $conn->query($equipmentQuery);
     <title>Equipment Request</title>
     <link rel="stylesheet" href="styles.css">
     <script>
-        function addEquipmentField() {
-            const equipmentContainer = document.getElementById('equipment-container');
-            const newField = document.createElement('div');
-            newField.className = 'equipment-item';
-            newField.innerHTML = ` 
-                <label>อุปกรณ์ที่ต้องการเบิก:</label>
-                <select name="Equipment_id[]" required>
-                    <?php
+       function addEquipmentField() {
+    const equipmentContainer = document.getElementById('equipment-container');
+    const newField = document.createElement('div');
+    newField.className = 'equipment-item'; // เพิ่มคลาสให้เหมือนกับแถวเดิม
+    newField.innerHTML = `
+        <label class="eqreq_label">อุปกรณ์ที่ต้องการเบิก:</label>
+        <select name="Equipment_id[]" class="eqreq_select" required>
+            <?php
+            $equipmentResult->data_seek(0);
+            while ($equipment = $equipmentResult->fetch_assoc()): ?>
+                <option value="<?php echo $equipment['id']; ?>"><?php echo $equipment['Name']; ?> (คงเหลือ: <?php echo $equipment['QuantityAvailable']; ?>)</option>
+            <?php endwhile; ?>
+        </select>
 
-                    $equipmentResult->data_seek(0);
-                    while ($equipment = $equipmentResult->fetch_assoc()): ?>
-                        <option value="<?php echo $equipment['id']; ?>"><?php echo $equipment['Name']; ?> (คงเหลือ: <?php echo $equipment['QuantityAvailable']; ?>)</option>
-                    <?php endwhile; ?>
-                </select>
+        <label class="eqreq_label">จำนวนที่ต้องการเบิก:</label>
+        <input type="number" name="QuantityUsed[]" min="1" class="eqreq_input-number" required>
 
-                <label>จำนวนที่ต้องการเบิก:</label>
-                <input type="number" name="QuantityUsed[]" min="1" required>
+        <button type="button" onclick="removeEquipmentField(this)" class="btn btn-danger eqreq_btn-remove">ลบ</button>
+    `;
+    equipmentContainer.appendChild(newField);
+}
 
-                <button type="button" onclick="removeEquipmentField(this)">ลบ</button>
-            `;
-            equipmentContainer.appendChild(newField);
-        }
 
         function removeEquipmentField(button) {
             const equipmentContainer = document.getElementById('equipment-container');
@@ -142,6 +142,12 @@ $equipmentResult = $conn->query($equipmentQuery);
 </head>
 
 <body>
+<?php
+    if (isset($_SESSION['error'])) {
+        echo "<script>alert('{$_SESSION['error']}');</script>";
+        unset($_SESSION['error']); // ลบข้อความแจ้งเตือนหลังแสดงแล้ว
+    }
+    ?>
     <h2 class="eqreq_heading">แบบฟอร์มเบิกอุปกรณ์</h2>
     <form method="post" class="eqreq_form">
         <label for="NameEquipmentRequest" class="eqreq_label">ชื่องานที่ซ่อม:</label>
